@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import Searchbar from './Searchbar';
 import ImageGallery from './ImageGallery';
@@ -7,91 +7,82 @@ import Modal from './Modal';
 import Button from './Button';
 import fetchImages from '../services';
 
-export default class App extends Component {
-  state = {
-    searchText: '',
-    collection: [],
-    page: 1,
-    loader: false,
-    showModal: false,
-    imgModal: '',
-    tags: '',
-    error: null,
-    total: 0,
+export default function App() {
+  const [searchText, setSearchText] = useState('');
+  const [collection, setCollection] = useState([]);
+  const [page, setPage] = useState(1);
+  const [loader, setLoader] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [imgModal, setImgModal] = useState('');
+  const [tags, setTags] = useState('');
+  const [error, setError] = useState(null);
+  const [total, setTotal] = useState(0);
+
+  const openModal = (imgLarge, tags) => {
+    setShowModal(true);
+    setImgModal(imgLarge);
+    setTags(tags);
   };
 
-  async componentDidUpdate(prevProps, prevState) {
-    if (
-      prevState.searchText !== this.state.searchText ||
-      prevState.page !== this.state.page
-    ) {
-      try {
-        this.setState({ loader: true });
-        const images = await fetchImages(
-          this.state.searchText,
-          this.state.page
-        );
-        const { hits, totalHits } = images;
+  const closeModal = () => {
+    setShowModal(false);
+    setImgModal('');
+    setTags('');
+  };
+
+  const handleSearchSubmit = searchText => {
+    setSearchText(searchText);
+    setCollection([]);
+    setPage(1);
+  };
+
+  const handleLoadMoreClick = () => {
+    setLoader(true);
+    setPage(prevPage => prevPage + 1);
+  };
+
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current || searchText === '') {
+      isFirstRender.current = false;
+      return;
+    }
+    setLoader(true);
+    fetchImages(searchText, page)
+      .then(({ hits, totalHits }) => {
         if (hits.length === 0) {
           return toast.info('No images! Type a new search input!', {
             theme: 'colored',
           });
         }
-        this.setState(prevState => ({
-          collection: [...prevState.collection, ...hits],
-          loader: false,
-          total: totalHits,
-        }));
-      } catch (error) {
-        this.setState({ error });
-      }
-    }
-  }
-  openModal = (imgLarge, tags) => {
-    this.setState({ showModal: true, imgModal: imgLarge, tags });
-  };
-  closeModal = () => {
-    this.setState({ showModal: false, imgModal: '', tags: '' });
-  };
-  handleSearchSubmit = searchText => {
-    this.setState({ searchText, collection: [], page: 1 });
-  };
-  handleLoadMoreClick = () => {
-    this.setState({ loader: true });
-    this.setState(prevState => ({ page: prevState.page + 1 }));
-  };
+        setCollection(prevCollection => [...prevCollection, ...hits]);
+        setLoader(false);
+        setTotal(totalHits);
+      })
+      .catch(error => {
+        setError(error);
+      });
+  }, [page, searchText]);
 
-  render() {
-    const pagesNumber = this.state.total / this.state.collection.length;
-    return (
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr',
-          gridGap: '16px',
-          paddingBottom: '24px',
-        }}
-      >
-        <Searchbar onSubmit={this.handleSearchSubmit} />
-        <ToastContainer autoClose={2000} />
-        <ImageGallery
-          collection={this.state.collection}
-          onImgClick={this.openModal}
-        />
-        {this.state.loader && <Loader />}
-        {this.state.showModal && (
-          <Modal
-            image={this.state.imgModal}
-            tags={this.state.tags}
-            onClose={this.closeModal}
-          />
-        )}
-        {pagesNumber > 1 &&
-          !this.state.loader &&
-          this.state.collection !== 0 && (
-            <Button onClick={this.handleLoadMoreClick} />
-          )}
-      </div>
-    );
-  }
+  const pagesNumber = total / collection.length;
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr',
+        gridGap: '16px',
+        paddingBottom: '24px',
+      }}
+    >
+      <Searchbar onSubmit={handleSearchSubmit} />
+      <ToastContainer autoClose={2000} />
+      <ImageGallery collection={collection} onImgClick={openModal} />
+      {loader && <Loader />}
+      {showModal && <Modal image={imgModal} tags={tags} onClose={closeModal} />}
+      {pagesNumber > 1 && !loader && collection !== 0 && (
+        <Button onClick={handleLoadMoreClick} />
+      )}
+    </div>
+  );
 }
